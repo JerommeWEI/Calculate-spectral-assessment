@@ -19,7 +19,21 @@ def load_fpi_data(directory):
     
     files = sorted(files, key=extract_number)
     
-    data = np.loadtxt(files[0], delimiter='\t', skiprows=1)
+    def detect_skiprows(filepath):
+        with open(filepath, 'r', encoding='utf-8') as f:
+            for i, line in enumerate(f):
+                stripped = line.strip()
+                if stripped and not stripped.startswith('#'):
+                    try:
+                        parts = stripped.split('\t')
+                        float(parts[0])
+                        return i
+                    except (ValueError, IndexError):
+                        continue
+        return 1
+    
+    skiprows = detect_skiprows(files[0])
+    data = np.loadtxt(files[0], delimiter='\t', skiprows=skiprows)
     wavelengths = data[:, 0]
     n_wavelengths = len(wavelengths)
     n_states = len(files)
@@ -29,7 +43,8 @@ def load_fpi_data(directory):
     sensing_matrix = np.zeros((n_states, n_wavelengths))
     
     for i, filepath in enumerate(files):
-        data = np.loadtxt(filepath, delimiter='\t', skiprows=1)
+        skiprows = detect_skiprows(filepath)
+        data = np.loadtxt(filepath, delimiter='\t', skiprows=skiprows)
         sensing_matrix[i, :] = data[:, trans_col]
     
     return wavelengths, sensing_matrix
@@ -46,9 +61,11 @@ def visualize_matrix(wavelengths, sensing_matrix, output_path=None):
     axes[0].set_ylabel('FPI State (Cavity Length Index)')
     fig.colorbar(im1, ax=axes[0])
     
-    corr_matrix = np.corrcoef(sensing_matrix, rowvar=False)
+    valid_cols = ~np.all(sensing_matrix == 0, axis=0)
+    valid_wavelengths = wavelengths[valid_cols]
+    corr_matrix = np.corrcoef(sensing_matrix[:, valid_cols], rowvar=False)
     im2 = axes[1].imshow(corr_matrix, aspect='auto', cmap='coolwarm', vmin=-1, vmax=1,
-                         extent=[wavelengths[0], wavelengths[-1], wavelengths[-1], wavelengths[0]])
+                         extent=[valid_wavelengths[0], valid_wavelengths[-1], valid_wavelengths[-1], valid_wavelengths[0]])
     axes[1].set_title('Wavelength Cross-Correlation')
     axes[1].set_xlabel('Wavelength (nm)')
     axes[1].set_ylabel('Wavelength (nm)')
@@ -72,7 +89,7 @@ def visualize_matrix(wavelengths, sensing_matrix, output_path=None):
 def main():
     parser = argparse.ArgumentParser(description='Visualize FPI sensing matrix from transmission data')
     parser.add_argument('directory', nargs='?', 
-                        default=r'E:\AA_repository\OneDrive - Unispectral Qingdao Microelectronics Co. LTD\01_研发\01-开发相关\07_MEMS\03_Coating\02-Macleod-仿真数据库\analysis_output\FPI-Performance\20260507_213546_202604171031-U450-MEMS-Metal-Coating-Ag-J08\BPF-data',
+                        default=r'E:\AA_repository\OneDrive - Unispectral Qingdao Microelectronics Co. LTD\01_研发\01-开发相关\07_MEMS\03_Coating\02-Macleod-仿真数据库\analysis_output\FPI-Performance\20260509_134338_202604171031-U450-MEMS-Metal-Coating-Ag-J08\data-BPF-BowEffect',
                         help='Directory containing *nm.txt files')
     args = parser.parse_args()
     
@@ -93,4 +110,5 @@ def main():
     visualize_matrix(wavelengths, sensing_matrix, output_path)
 
 if __name__ == "__main__":
+    os.system('cls' if os.name == 'nt' else 'clear') 
     main()
