@@ -15,7 +15,10 @@ def load_fpi_data(directory):
     def extract_number(f):
         basename = os.path.basename(f)
         num_str = basename.split('nm')[0]
-        return int(num_str)
+        try:
+            return int(num_str)
+        except ValueError:
+            return int(num_str.replace('-', ''))
     
     files = sorted(files, key=extract_number)
     
@@ -32,20 +35,38 @@ def load_fpi_data(directory):
                         continue
         return 1
     
-    skiprows = detect_skiprows(files[0])
+    def detect_columns(filepath):
+        with open(filepath, 'r', encoding='utf-8') as f:
+            for i, line in enumerate(f):
+                stripped = line.strip()
+                if stripped and not stripped.startswith('#'):
+                    parts = stripped.split('\t')
+                    try:
+                        float(parts[0])
+                        if len(parts) >= 2:
+                            return 1, i
+                        return 1, i
+                    except ValueError:
+                        header_lower = [h.lower() for h in parts]
+                        for col_idx, h in enumerate(header_lower):
+                            if 'tavg' in h or 't_avg' in h:
+                                return col_idx, i + 1
+                        if len(parts) >= 2:
+                            return 1, i + 1
+        return 1, 1
+    
+    trans_col, skiprows = detect_columns(files[0])
     data = np.loadtxt(files[0], delimiter='\t', skiprows=skiprows)
     wavelengths = data[:, 0]
     n_wavelengths = len(wavelengths)
     n_states = len(files)
     
-    trans_col = 1 if data.shape[1] == 2 else 2
-    
     sensing_matrix = np.zeros((n_states, n_wavelengths))
     
     for i, filepath in enumerate(files):
-        skiprows = detect_skiprows(filepath)
-        data = np.loadtxt(filepath, delimiter='\t', skiprows=skiprows)
-        sensing_matrix[i, :] = data[:, trans_col]
+        col, skip = detect_columns(filepath)
+        data = np.loadtxt(filepath, delimiter='\t', skiprows=skip)
+        sensing_matrix[i, :] = data[:, col]
     
     return wavelengths, sensing_matrix
 
@@ -56,7 +77,7 @@ def visualize_matrix(wavelengths, sensing_matrix, output_path=None):
     
     im1 = axes[0].imshow(sensing_matrix, aspect='auto', cmap='viridis',
                          extent=[wavelengths[0], wavelengths[-1], N_states, 1])
-    axes[0].set_title('Sensing Matrix $\Phi$ (T($\lambda$, d))')
+    axes[0].set_title(r'Sensing Matrix $\Phi$ (T($\lambda$, d))')
     axes[0].set_xlabel('Wavelength (nm)')
     axes[0].set_ylabel('FPI State (Cavity Length Index)')
     fig.colorbar(im1, ax=axes[0])
@@ -89,7 +110,7 @@ def visualize_matrix(wavelengths, sensing_matrix, output_path=None):
 def main():
     parser = argparse.ArgumentParser(description='Visualize FPI sensing matrix from transmission data')
     parser.add_argument('directory', nargs='?', 
-                        default=r'E:\AA_repository\OneDrive - Unispectral Qingdao Microelectronics Co. LTD\01_研发\01-开发相关\07_MEMS\03_Coating\02-Macleod-仿真数据库\analysis_output\FPI-Performance\20260509_134338_202604171031-U450-MEMS-Metal-Coating-Ag-J08\data-BPF-BowEffect',
+                        default=r'F:\05-Jerome Studios\Coating Design\Coating_data\UMTL450\202605121644-U450-MEMS-Metal-Coating-Ag-J08-angular',
                         help='Directory containing *nm.txt files')
     args = parser.parse_args()
     
